@@ -1,51 +1,89 @@
 import 'package:flutter/foundation.dart';
 import '../models/user_profile.dart';
 import '../repositories/profile_repository.dart';
+import '../services/auth_service.dart';
 
 class ProfileViewModel extends ChangeNotifier {
   final ProfileRepository _repository;
+  final AuthService _authService;
 
-  ProfileViewModel({required ProfileRepository repository})
-      : _repository = repository;
+  ProfileViewModel({
+    required ProfileRepository repository,
+    required AuthService authService,
+  })  : _repository = repository,
+        _authService = authService;
 
-  UserProfile? get profile => _repository.profile;
+  UserProfile? _profile;
+  UserProfile? get profile => _profile;
 
-  bool get hasProfile => _repository.hasProfile;
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
 
-  String get displayName => _repository.profile?.name ?? 'Guest User';
+  bool get hasProfile => _profile != null && _profile!.isNotEmpty;
 
-  String get displayEmail =>
-      _repository.profile?.email ?? 'guest@shopease.com';
-
-  String get displayPhone => _repository.profile?.phone ?? '';
-
-  String get displayAddress => _repository.profile?.address ?? '';
+  String get displayName => _profile?.name ?? 'Guest User';
+  String get displayEmail => _profile?.email ?? 'guest@shopease.com';
+  String get displayPhone => _profile?.phone ?? '';
+  String get displayAddress => _profile?.address ?? '';
 
   String get initials {
-    final p = _repository.profile;
-    if (p == null || p.name.isEmpty) return '?';
-    return p.initials;
+    if (_profile == null || _profile!.name.isEmpty) return '?';
+    return _profile!.initials;
   }
 
-  void saveProfile({
+  Future<void> loadProfile() async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) {
+      _profile = null;
+      notifyListeners();
+      return;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _profile = await _repository.getProfile(userId);
+    } catch (e) {
+      _profile = null;
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> saveProfile({
     required String name,
     required String email,
     required String phone,
     required String address,
-  }) {
-    _repository.saveProfile(
-      UserProfile(
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        address: address.trim(),
-      ),
+  }) async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) return;
+
+    final profile = UserProfile(
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+      address: address.trim(),
     );
+
+    await _repository.saveProfile(profile, userId);
+    _profile = profile;
     notifyListeners();
   }
 
-  void clearProfile() {
-    _repository.clear();
+  Future<void> clearProfile() async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) return;
+
+    await _repository.clearProfile(userId);
+    _profile = null;
+    notifyListeners();
+  }
+
+  void clearLocalState() {
+    _profile = null;
     notifyListeners();
   }
 }

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../core/constants/app_constants.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/cart_viewmodel.dart';
+import '../viewmodels/order_viewmodel.dart';
 import '../viewmodels/profile_viewmodel.dart';
+import '../views/auth/login_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   final void Function(String route)? onNavigate;
@@ -49,6 +51,7 @@ class AppDrawer extends StatelessWidget {
                   title: 'About',
                   route: 'about',
                 ),
+                _buildLogoutItem(context),
               ],
             ),
           ),
@@ -183,6 +186,74 @@ class AppDrawer extends StatelessWidget {
           },
         );
       },
+    );
+  }
+
+  Widget _buildLogoutItem(BuildContext context) {
+    return ListTile(
+      leading: const Icon(
+        Icons.logout_rounded,
+        color: AppColors.error,
+      ),
+      title: Text(
+        'Logout',
+        style: AppTextStyles.body.copyWith(color: AppColors.error),
+      ),
+      onTap: () {
+        Navigator.pop(context);
+        _showLogoutDialog(context);
+      },
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    final authVM = context.read<AuthViewModel>();
+    final cartVM = context.read<CartViewModel>();
+    final orderVM = context.read<OrderViewModel>();
+    final profileVM = context.read<ProfileViewModel>();
+    final navigator = Navigator.of(context, rootNavigator: true);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text('Logout?'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+
+              try {
+                await authVM.signOut();
+              } catch (e) {
+                debugPrint('SignOut error: $e');
+              }
+
+              cartVM.clearLocalState();
+              orderVM.clearLocalState();
+              profileVM.clearLocalState();
+
+              navigator.pushAndRemoveUntil(
+                MaterialPageRoute(
+                  builder: (_) => const LoginScreen(),
+                ),
+                    (route) => false,
+              );
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.error,
+            ),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -4,15 +4,14 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/app_formatters.dart';
+import '../../core/utils/feedback_helper.dart';
+import '../../models/order.dart';
 import '../../viewmodels/cart_viewmodel.dart';
-import '../orders/orders_screen.dart';
+import '../../viewmodels/order_viewmodel.dart';
+import '../../viewmodels/profile_viewmodel.dart';
 import 'widgets/checkout_form.dart';
 import 'widgets/order_items_preview.dart';
 import 'widgets/payment_method_selector.dart';
-import '../../viewmodels/order_viewmodel.dart';
-import '../../models/order.dart';
-import '../../viewmodels/profile_viewmodel.dart';
-import '../../core/utils/feedback_helper.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
@@ -31,7 +30,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _isPlacing = false;
 
   @override
-  @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -47,6 +45,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _phoneController.text = profile.phone;
     _addressController.text = profile.address;
   }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
@@ -59,9 +59,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     final cart = context.read<CartViewModel>();
     final orderVM = context.read<OrderViewModel>();
@@ -75,23 +73,35 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _isPlacing = true;
     });
 
-    await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      final order = await orderVM.createOrder(
+        cartItems: cart.items,
+        customerName: _nameController.text.trim(),
+        customerPhone: _phoneController.text.trim(),
+        customerAddress: _addressController.text.trim(),
+        paymentMethod: _paymentMethod,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    final order = orderVM.createOrder(
-      cartItems: cart.items,
-      customerName: _nameController.text.trim(),
-      customerPhone: _phoneController.text.trim(),
-      customerAddress: _addressController.text.trim(),
-      paymentMethod: _paymentMethod,
-    );
+      setState(() {
+        _isPlacing = false;
+      });
 
-    setState(() {
-      _isPlacing = false;
-    });
+      await cart.clearCart();
 
-    _showSuccessDialog(order);
+      if (!mounted) return;
+
+      _showSuccessDialog(order);
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isPlacing = false;
+      });
+
+      FeedbackHelper.showError(context, 'Failed to place order. Try again.');
+    }
   }
 
   void _showSuccessDialog(Order order) {
@@ -142,9 +152,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: ElevatedButton(
                 onPressed: () {
                   Navigator.pop(dialogContext);
-                  _onOrderComplete(order);
+                  _goToOrdersTab();
                 },
-                child: const Text('View Order'),
+                child: const Text('View Orders'),
               ),
             ),
             const SizedBox(height: 8),
@@ -153,7 +163,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: OutlinedButton(
                 onPressed: () {
                   Navigator.pop(dialogContext);
-                  _onOrderCompleteAndGoHome();
+                  _goHome();
                 },
                 child: const Text('Continue Shopping'),
               ),
@@ -170,21 +180,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return fullId;
   }
 
-  void _onOrderComplete(Order order) {
-    context.read<CartViewModel>().clearCart();
+  void _goToOrdersTab() {
     Navigator.of(context).popUntil((route) => route.isFirst);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      FeedbackHelper.showSuccess(
-        context,
-        'Order #${_shortId(order.id)} placed successfully',
-      );
-    });
   }
 
-  void _onOrderCompleteAndGoHome() {
-    context.read<CartViewModel>().clearCart();
+  void _goHome() {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
@@ -244,8 +244,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         builder: (context, cart, _) {
           if (cart.isEmpty) return const SizedBox.shrink();
 
-          final total =
-              cart.subtotal + AppConstants.deliveryCharge;
+          final total = cart.subtotal + AppConstants.deliveryCharge;
 
           return Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -287,7 +286,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           color: Colors.white,
                         ),
                       )
-                          : const Icon(Icons.check_circle_outline, size: 20),
+                          : const Icon(
+                        Icons.check_circle_outline,
+                        size: 20,
+                      ),
                       label: Text(
                         _isPlacing ? 'Placing Order...' : 'Place Order',
                       ),

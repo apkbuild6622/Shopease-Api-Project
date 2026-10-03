@@ -4,33 +4,67 @@ import '../models/cart_item.dart';
 import '../models/order.dart';
 import '../models/order_item.dart';
 import '../repositories/order_repository.dart';
+import '../services/auth_service.dart';
 
 class OrderViewModel extends ChangeNotifier {
   final OrderRepository _repository;
+  final AuthService _authService;
 
-  OrderViewModel({required OrderRepository repository})
-      : _repository = repository;
+  OrderViewModel({
+    required OrderRepository repository,
+    required AuthService authService,
+  })  : _repository = repository,
+        _authService = authService;
 
-  List<Order> get orders => _repository.orders;
+  List<Order> _orders = [];
+  List<Order> get orders => List.unmodifiable(_orders);
 
-  int get orderCount => _repository.orderCount;
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
 
-  bool get isEmpty => _repository.isEmpty;
+  bool get isEmpty => _orders.isEmpty;
+  bool get isNotEmpty => _orders.isNotEmpty;
 
-  bool get isNotEmpty => !_repository.isEmpty;
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
 
-  Order? getById(String orderId) => _repository.getById(orderId);
+  Future<void> fetchOrders() async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) {
+      _orders = [];
+      notifyListeners();
+      return;
+    }
 
-  Order createOrder({
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _orders = await _repository.getUserOrders(userId);
+    } catch (e) {
+      _errorMessage = 'Failed to load orders';
+      _orders = [];
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<Order> createOrder({
     required List<CartItem> cartItems,
     required String customerName,
     required String customerPhone,
     required String customerAddress,
     String paymentMethod = 'cod',
-  }) {
-    final orderItems = cartItems
-        .map((cartItem) => OrderItem.fromCartItem(cartItem))
-        .toList();
+  }) async {
+    final userId = _authService.currentUser?.uid;
+    if (userId == null) {
+      throw Exception('User not logged in');
+    }
+
+    final orderItems =
+    cartItems.map((ci) => OrderItem.fromCartItem(ci)).toList();
 
     final subtotal = orderItems.fold<double>(
       0.0,
@@ -51,23 +85,23 @@ class OrderViewModel extends ChangeNotifier {
       status: OrderStatus.pending,
     );
 
-    _repository.addOrder(order);
+    await _repository.addOrder(order, userId);
+
+    _orders.insert(0, order);
     notifyListeners();
 
     return order;
   }
 
-  void clearOrders() {
-    _repository.clear();
+  void clearLocalState() {
+    _orders = [];
     notifyListeners();
   }
 
   String _generateOrderId() {
     final now = DateTime.now();
-    final datePart =
-        '${now.year}${_pad(now.month)}${_pad(now.day)}';
-    final randomPart =
-    (1000 + (DateTime.now().microsecond % 9000)).toString();
+    final datePart = '${now.year}${_pad(now.month)}${_pad(now.day)}';
+    final randomPart = (1000 + (now.microsecond % 9000)).toString();
     return 'ORD-$datePart-$randomPart';
   }
 

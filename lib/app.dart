@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
-import 'views/main_shell.dart';
+import 'views/splash/splash_screen.dart';
 
 class ShopEaseApp extends StatelessWidget {
   const ShopEaseApp({super.key});
@@ -12,7 +12,7 @@ class ShopEaseApp extends StatelessWidget {
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const MainShell(),
+      home: const SplashScreen(),
     );
   }
 }

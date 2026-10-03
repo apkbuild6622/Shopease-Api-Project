@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../core/constants/app_constants.dart';
 import '../core/theme/app_colors.dart';
+import '../viewmodels/cart_viewmodel.dart';
+import '../viewmodels/order_viewmodel.dart';
+import '../viewmodels/profile_viewmodel.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/cart_badge_icon.dart';
@@ -30,6 +34,22 @@ class _MainShellState extends State<MainShell> {
       OrdersScreen(showAppBar: false),
       ProfileScreen(showAppBar: false),
     ];
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUserData();
+    });
+  }
+
+  Future<void> _loadUserData() async {
+    final cart = context.read<CartViewModel>();
+    final orders = context.read<OrderViewModel>();
+    final profile = context.read<ProfileViewModel>();
+
+    await Future.wait([
+      cart.loadCart(),
+      orders.fetchOrders(),
+      profile.loadProfile(),
+    ]);
   }
 
   void _onTabTap(int index) {
@@ -142,9 +162,13 @@ class _MainShellState extends State<MainShell> {
   List<Widget> _buildAppBarActions() {
     return [
       if (_currentIndex == 0)
-        CartBadgeIcon(
-          count: 0,
-          onTap: () => _onTabTap(1),
+        Consumer<CartViewModel>(
+          builder: (context, cart, _) {
+            return CartBadgeIcon(
+              count: cart.totalQuantity,
+              onTap: () => _onTabTap(1),
+            );
+          },
         ),
       const SizedBox(width: 4),
     ];
